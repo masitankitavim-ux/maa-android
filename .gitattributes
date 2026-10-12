@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.sh   text eol=lf
+*.prop text eol=lf
+*.c    text eol=lf
+*.go   text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+*.webp binary
+*.so   binary

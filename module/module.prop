@@ -1,0 +1,6 @@
+id=maa_android
+name=MAA Android
+version=v1.0.1
+versionCode=10001
+author=Seagull
+description=MAA core console for arm64 Android with native control and auto-update.

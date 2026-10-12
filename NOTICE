@@ -1,0 +1,40 @@
+MAA Android
+Copyright (c) <YEAR> MAA Android contributors
+
+This is a THIRD-PARTY project. It is not affiliated with, sponsored by, or
+endorsed by the MaaAssistantArknights project.
+
+--------------------------------------------------------------------------------
+Third-party components referenced, downloaded or interfaced with
+--------------------------------------------------------------------------------
+
+1) MaaAssistantArknights (MAA)
+   https://github.com/MaaAssistantArknights/MaaAssistantArknights
+   License: GNU Affero General Public License v3.0 (AGPL-3.0)
+
+   This repository does NOT bundle or redistribute any MAA binary. At runtime
+   the user's device downloads the official component archive
+   (MAAComponent-<tag>-android-arm64.tar.gz) directly from the MAA GitHub
+   Releases and loads it. All MAA code, resources and their copyright remain
+   with the MaaAssistantArknights project and its contributors.
+
+2) MaaFramework
+   https://github.com/MaaXYZ/MaaFramework
+   License: GNU Lesser General Public License v3.0 (LGPL-3.0)
+
+   The Android native control unit ABI implemented by nativeext/ mirrors the
+   interface published by MaaFramework (source/MaaAndroidNativeControlUnit/).
+
+3) Petdex - "Vivimi" animated sprite
+   https://petdex.dev/pets/vivimi-strict
+   Asset: maaweb/webui/vivimi.webp
+
+   Animated pixel art of the Arknights character W, Vivimei skin, credited by
+   Petdex to the author "stylewth". Copyright belongs to the original author.
+   Arknights is a trademark of Hypergryph / Studio Montagne. Included for
+   personal, non-commercial use; remove it if you redistribute commercially.
+
+--------------------------------------------------------------------------------
+
+MAA Android itself is licensed under the GNU Affero General Public License v3.0.
+See LICENSE.
