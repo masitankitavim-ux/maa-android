@@ -1,0 +1,25 @@
+# build outputs
+*.zip
+*.tar.gz
+*.apk
+maaweb/maaweb
+maaweb/maaweb.new*
+
+# native build
+*.o
+*.so
+
+# module staging (filled at pack time)
+module/system/
+module/common/
+module/lib/
+
+# publish pipeline
+.publish/
+github-publish.local.toml
+
+# editors / os
+.DS_Store
+Thumbs.db
+*.swp
+*~

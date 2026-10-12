@@ -1,0 +1,140 @@
+#!/system/bin/sh
+set -u
+export PATH=/system/bin:/sbin:/system/xbin:$PATH
+DATA=/data/adb/maa
+LIBDIR=$DATA/lib
+RESDIR=$DATA/resource
+RUN=$DATA/run
+VERSION_MARKER=$DATA/component_version
+PROXY=https://gh-proxy.com
+API_URL=https://api.github.com/repos/MaaAssistantArknights/MaaAssistantArknights/releases/latest
+UA='MAA-Android/1.0'
+MIN_SIZE=120000000
+
+log() { echo "[maactl] $(date '+%F %T') $*"; }
+die() { echo "[maactl] ERROR: $*" >&2; exit 1; }
+
+latest_tag() {
+  curl -fsSL --connect-timeout 10 --max-time 30 -A "$UA" "$API_URL" 2>/dev/null \
+    | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+}
+
+download_component() {
+  tag=$1
+  out=$2
+  url="$PROXY/https://github.com/MaaAssistantArknights/MaaAssistantArknights/releases/download/$tag/MAAComponent-$tag-android-arm64.tar.gz"
+  log "downloading $tag from $url"
+  curl -fL --connect-timeout 10 --max-time 1800 --retry 3 --retry-delay 5 -A "$UA" -o "$out" "$url" || return 1
+  size=$(stat -c %s "$out" 2>/dev/null || echo 0)
+  [ "$size" -gt "$MIN_SIZE" ] || { log "download too small: $size"; return 1; }
+  log "download ok size=$size"
+  return 0
+}
+
+install_component() {
+  tag=$1
+  archive=$2
+  stage=$DATA/.stage
+  rm -rf "$stage"
+  mkdir -p "$stage" "$LIBDIR" "$RESDIR"
+  /system/bin/maaweb -extract "$archive" "$stage" || return 1
+  # Keep our external injection library; replace official component libraries.
+  cp -f "$stage"/lib*.so "$LIBDIR"/ 2>/dev/null || return 1
+  # Preserve injected lib explicitly even if future component packages name it.
+  [ -f "$LIBDIR/libMaaNativeExt.so" ] || return 1
+  rm -rf "$RESDIR.new"
+  mkdir -p "$RESDIR.new"
+  cp -a "$stage/resource/." "$RESDIR.new/" || return 1
+  restore_ocr_models || return 1
+  mv "$RESDIR" "$RESDIR.old" 2>/dev/null || true
+  mv "$RESDIR.new" "$RESDIR" || { mv "$RESDIR.old" "$RESDIR" 2>/dev/null || true; return 1; }
+  rm -rf "$RESDIR.old"
+  echo "$tag" > "$VERSION_MARKER"
+  chcon -R u:object_r:magisk_file:s0 "$DATA" 2>/dev/null || true
+  rm -f "$archive"
+  rm -rf "$stage"
+  return 0
+}
+
+restore_ocr_models() {
+  src=$DATA/ocr-ncnn
+  [ -d "$src" ] || return 1
+  for kind in PaddleOCR PaddleCharOCR; do
+    mkdir -p "$RESDIR.new/$kind/det" "$RESDIR.new/$kind/rec"
+    cp -f "$src/$kind/det/det.ncnn.param" "$RESDIR.new/$kind/det/det.ncnn.param" || return 1
+    cp -f "$src/$kind/det/det.ncnn.bin" "$RESDIR.new/$kind/det/det.ncnn.bin" || return 1
+    cp -f "$src/$kind/rec/rec.ncnn.param" "$RESDIR.new/$kind/rec/rec.ncnn.param" || return 1
+    cp -f "$src/$kind/rec/rec.ncnn.bin" "$RESDIR.new/$kind/rec/rec.ncnn.bin" || return 1
+    cp -f "$src/$kind/rec/keys.txt" "$RESDIR.new/$kind/rec/keys.txt" 2>/dev/null || true
+  done
+  return 0
+}
+
+ocr_ready() {
+  for kind in PaddleOCR PaddleCharOCR; do
+    [ -f "$RESDIR/$kind/det/det.ncnn.param" ] && [ -f "$RESDIR/$kind/det/det.ncnn.bin" ] || return 1
+    [ -f "$RESDIR/$kind/rec/rec.ncnn.param" ] && [ -f "$RESDIR/$kind/rec/rec.ncnn.bin" ] && [ -f "$RESDIR/$kind/rec/keys.txt" ] || return 1
+  done
+  return 0
+}
+
+current_version() {
+  if [ -f "$VERSION_MARKER" ]; then cat "$VERSION_MARKER"; else echo ""; fi
+}
+
+cmd=${1:-status}
+case "$cmd" in
+  status)
+    echo "current=$(current_version)"
+    echo "lib=$([ -f "$LIBDIR/libMaaCore.so" ] && echo ready || echo missing)"
+    echo "resource=$([ -f "$RESDIR/config.json" ] && echo ready || echo missing)"
+    ;;
+  ensure)
+    if [ -f "$LIBDIR/libMaaCore.so" ] && [ -f "$RESDIR/config.json" ] && [ -f "$LIBDIR/libMaaNativeExt.so" ] && ocr_ready; then
+      log "component already present"
+    else
+      tag=$(latest_tag) || tag=""
+      [ -n "$tag" ] || die "cannot resolve latest version"
+      archive="$DATA/maa-component-$tag.tar.gz"
+      rm -f "$archive"
+      download_component "$tag" "$archive" || die "download failed"
+      install_component "$tag" "$archive" || die "install failed"
+      log "bootstrapped $tag"
+    fi
+    ;;
+  update)
+    old=$(current_version)
+    tag=$(latest_tag) || die "cannot resolve latest version"
+    [ -n "$tag" ] || die "empty version"
+    log "current=$old latest=$tag"
+    if [ "$old" = "$tag" ] && [ -f "$LIBDIR/libMaaCore.so" ]; then
+      echo "already up to date: $tag"
+      exit 0
+    fi
+    archive="$DATA/maa-component-$tag.tar.gz"
+    rm -f "$archive"
+    download_component "$tag" "$archive" || die "download failed"
+    install_component "$tag" "$archive" || die "install failed"
+    log "updated to $tag"
+    # Restart the web console so it picks up the new libMaaCore.so.
+    pkill -f /system/bin/maaweb 2>/dev/null || true
+    echo "updated to $tag"
+    ;;
+  install)
+    tag=$2
+    archive=$3
+    [ -n "$tag" ] || die "usage: maactl install <tag> <archive>"
+    [ -f "$archive" ] || die "archive not found: $archive"
+    install_component "$tag" "$archive" || die "install failed"
+    log "installed $tag"
+    echo "installed $tag"
+    ;;
+  restart)
+    pkill -f /system/bin/maaweb 2>/dev/null || true
+    echo "restarted"
+    ;;
+  *)
+    echo "usage: maactl {status|ensure|update|install|restart}" >&2
+    exit 2
+    ;;
+esac
